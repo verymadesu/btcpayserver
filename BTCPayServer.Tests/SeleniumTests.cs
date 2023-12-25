@@ -14,6 +14,7 @@ using BTCPayServer.Abstractions.Models;
 using BTCPayServer.Client;
 using BTCPayServer.Client.Models;
 using BTCPayServer.Data;
+using BTCPayServer.HostedServices;
 using BTCPayServer.Lightning;
 using BTCPayServer.NTag424;
 using BTCPayServer.Payments;
@@ -2039,6 +2040,7 @@ namespace BTCPayServer.Tests
         public async Task CanUsePullPaymentsViaUI()
         {
             using var s = CreateSeleniumTester();
+            s.Server.DeleteStore = false;
             s.Server.ActivateLightning(LightningConnectionType.LndREST);
             await s.StartAsync();
             await s.Server.EnsureChannelsSetup();
@@ -2161,7 +2163,6 @@ namespace BTCPayServer.Tests
             });
             s.GoToHome();
             //offline/external payout test
-
             var newStore = s.CreateNewStore();
             s.GenerateWallet("BTC", "", true, true);
             s.GoToStore(s.StoreId, StoreNavPages.PullPayments);
@@ -2351,6 +2352,22 @@ namespace BTCPayServer.Tests
 
             // Simulate a boltcard
             {
+                // LNURL Withdraw support check with BTC denomination
+                s.GoToStore(s.StoreId, StoreNavPages.PullPayments);
+                s.Driver.FindElement(By.Id("NewPullPayment")).Click();
+                s.Driver.FindElement(By.Id("Name")).SendKeys("TopUpTest");
+                s.Driver.SetCheckbox(By.Id("AutoApproveClaims"), true);
+                s.Driver.FindElement(By.Id("Amount")).Clear();
+                s.Driver.FindElement(By.Id("Amount")).SendKeys("100000");
+                s.Driver.FindElement(By.Id("Currency")).Clear();
+                s.Driver.FindElement(By.Id("Currency")).SendKeys("SATS" + Keys.Enter);
+                s.FindAlertMessage();
+                s.Driver.FindElement(By.LinkText("View")).Click();
+                s.Driver.SwitchTo().Window(s.Driver.WindowHandles.Last());
+
+                s.Driver.FindElement(By.CssSelector("#lnurlwithdraw-button")).Click();
+                s.Driver.WaitForElement(By.Id("qr-code-data-input"));
+                lnurl = new Uri(LNURL.LNURL.Parse(s.Driver.FindElement(By.Id("qr-code-data-input")).GetAttribute("value"), out _).ToString().Replace("https", "http"));
                 var db = s.Server.PayTester.GetService<ApplicationDbContextFactory>();
                 var ppid = lnurl.AbsoluteUri.Split("/").Last();
                 var issuerKey = new IssuerKey(SettingsRepositoryExtensions.FixedKey());
@@ -2365,6 +2382,25 @@ namespace BTCPayServer.Tests
                 // p and c should work so long as no bolt11 has been submitted
                 info = (LNURLWithdrawRequest)await LNURL.LNURL.FetchInformation(boltcardUrl, s.Server.PayTester.HttpClient);
                 info = (LNURLWithdrawRequest)await LNURL.LNURL.FetchInformation(boltcardUrl, s.Server.PayTester.HttpClient);
+                Assert.NotNull(info.PayLink);
+                Assert.StartsWith("lnurlp://", info.PayLink.AbsoluteUri);
+                // Ignore certs issue
+                info.PayLink = new Uri(info.PayLink.AbsoluteUri.Replace("lnurlp://", "http://"), UriKind.Absolute);
+                var payReq = (LNURLPayRequest)await LNURL.LNURL.FetchInformation(info.PayLink, s.Server.PayTester.HttpClient);
+                var callback = await payReq.SendRequest(LightMoney.Satoshis(100), Network.RegTest, s.Server.PayTester.HttpClient);
+                Assert.NotNull(callback.Pr);
+                var pr = BOLT11PaymentRequest.Parse(callback.Pr, Network.RegTest);
+                Assert.Equal(LightMoney.Satoshis(100), pr.MinimumAmount);
+                var res = await s.Server.CustomerLightningD.Pay(callback.Pr);
+                Assert.Equal(PayResult.Ok, res.Result);
+                var ppService = s.Server.PayTester.GetService<PullPaymentHostedService>();
+                var serializer = s.Server.PayTester.GetService<BTCPayNetworkJsonSerializerSettings>();
+                await TestUtils.EventuallyAsync(async () =>
+                {
+                    var pp = await ppService.GetPullPayment(ppid, true);
+                    Assert.Contains(pp.Payouts.Select(p => p.GetBlob(serializer)), p => p.CryptoAmount == -LightMoney.Satoshis(100).ToUnit(LightMoneyUnit.BTC));
+                });
+
                 var fakeBoltcardUrl = new Uri(Regex.Replace(boltcardUrl.AbsoluteUri, "p=([A-F0-9]{32})", $"p={RandomBytes(16)}"));
                 await Assert.ThrowsAsync<LNUrlException>(() => LNURL.LNURL.FetchInformation(fakeBoltcardUrl, s.Server.PayTester.HttpClient));
                 fakeBoltcardUrl = new Uri(Regex.Replace(boltcardUrl.AbsoluteUri, "c=([A-F0-9]{16})", $"c={RandomBytes(8)}"));

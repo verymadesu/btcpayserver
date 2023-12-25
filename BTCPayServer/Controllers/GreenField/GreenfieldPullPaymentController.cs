@@ -24,9 +24,7 @@ using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using NBitcoin.DataEncoders;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using MarkPayoutRequest = BTCPayServer.HostedServices.MarkPayoutRequest;
 
@@ -157,20 +155,7 @@ namespace BTCPayServer.Controllers.Greenfield
             }
             if (!ModelState.IsValid)
                 return this.CreateValidationError(ModelState);
-            var ppId = await _pullPaymentService.CreatePullPayment(new CreatePullPayment()
-            {
-                StartsAt = request.StartsAt,
-                ExpiresAt = request.ExpiresAt,
-                Period = request.Period,
-                BOLT11Expiration = request.BOLT11Expiration,
-                Name = request.Name,
-                Description = request.Description,
-                Amount = request.Amount,
-                Currency = request.Currency,
-                StoreId = storeId,
-                PaymentMethodIds = paymentMethods,
-                AutoApproveClaims = request.AutoApproveClaims
-            });
+            var ppId = await _pullPaymentService.CreatePullPayment(storeId, request);
             var pp = await _pullPaymentService.GetPullPayment(ppId, false);
             return this.Ok(CreatePullPaymentData(pp));
         }
