@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Reflection.Metadata;
 using System.Threading.Tasks;
-using AngleSharp.Dom;
 using BTCPayServer.Client.Models;
 using BTCPayServer.Controllers;
 using BTCPayServer.Controllers.Greenfield;
@@ -40,7 +39,7 @@ namespace BTCPayServer.Plugins.BoltcardBalance.Controllers
             _serializerSettings = serializerSettings;
         }
         [HttpGet("boltcards/balance")]
-        public async Task<IActionResult> ScanCard([FromQuery] string p = null, [FromQuery] string c = null)
+        public async Task<IActionResult> ScanCard([FromQuery] string p = null, [FromQuery] string c = null, [FromQuery]string view = null)
         {
             if (p is null || c is null)
             {
@@ -51,7 +50,8 @@ namespace BTCPayServer.Plugins.BoltcardBalance.Controllers
             //{
             //    AmountDue = 10000m,
             //    Currency = "SATS",
-            //    Transactions = [new() { Date = DateTimeOffset.UtcNow, Balance = -3.0m }, new() { Date = DateTimeOffset.UtcNow, Balance = -5.0m }]
+            //    Transactions = [new() { Date = DateTimeOffset.UtcNow, Balance = -3.0m }, new() { Date = DateTimeOffset.UtcNow, Balance = -5.0m }],
+            //    ViewMode = Mode.Reset
             //});
 
             var issuerKey = await _settingsRepository.GetIssuerKey(_env);
@@ -62,10 +62,10 @@ namespace BTCPayServer.Plugins.BoltcardBalance.Controllers
             var registration = await _dbContextFactory.GetBoltcardRegistration(issuerKey, boltData, true);
             if (registration is null)
                 return NotFound();
-            return await GetBalanceView(registration, p, issuerKey);
+            return await GetBalanceView(registration, p, issuerKey, view);
         }
         [NonAction]
-        public async Task<IActionResult> GetBalanceView(BoltcardDataExtensions.BoltcardRegistration registration, string p, IssuerKey issuerKey)
+        public async Task<IActionResult> GetBalanceView(BoltcardDataExtensions.BoltcardRegistration registration, string p, IssuerKey issuerKey, string view = null)
         {
             var ppId = registration.PullPaymentId;
             var boltCardKeys = issuerKey.CreatePullPaymentCardKey(registration.UId, registration.Version, ppId).DeriveBoltcardKeys(issuerKey);
@@ -124,7 +124,7 @@ namespace BTCPayServer.Plugins.BoltcardBalance.Controllers
                 Balance = blob.Limit,
                 Status = PayoutState.Completed
             });
-
+            vm.ViewMode = view?.Equals("Reset", StringComparison.OrdinalIgnoreCase) is true ? Mode.Reset : Mode.TopUp;
             return View($"{BoltcardBalancePlugin.ViewsDirectory}/BalanceView.cshtml", vm);
         }
 

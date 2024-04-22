@@ -32,7 +32,7 @@
 	<div id="qr" class="d-flex flex-column align-items-center justify-content-center d-none">
 		<div class="d-inline-flex flex-column" style="width:256px">
 			<div class="qr-container mb-2">
-				<vc:qr-code data="@Context.Request.GetCurrentUrl()" />
+				<vc:qr-code data="@Context.Request.GetCurrentUrlWithQueryString()" />
 			</div>
 		</div>
         <p class="text-secondary">NFC not supported in this device</p>
@@ -68,20 +68,25 @@
 				document.getElementById("error").classList.add("d-none");
 			}
         }
-		function toggleDetails(className)
+
+		function toggleDetailsWhenPressed(buttonId, className)
 		{
-			var el = document.getElementsByClassName("boltcard-details");
-			for (var i = 0; i < el.length; i++) {
-				if (el[i].classList.contains(className)) {
-					if (el[i].classList.contains("d-none"))
-						el[i].classList.remove("d-none");
-					else
-						el[i].classList.add("d-none");
-				}
-				else
-				{
-					el[i].classList.add("d-none");
-				}
+			var button = document.getElementById(buttonId);
+			if (button) {
+				var el = document.getElementsByClassName("boltcard-details");
+				button.addEventListener("click", function () {
+					for (var i = 0; i < el.length; i++) {
+						if (el[i].classList.contains(className)) {
+							if (el[i].classList.contains("d-none"))
+								el[i].classList.remove("d-none");
+							else
+								el[i].classList.add("d-none");
+						}
+						else {
+							el[i].classList.add("d-none");
+						}
+					}
+				});
 			}
 		}
         
@@ -96,6 +101,11 @@
                 var url = window.location.href.replace("#", "");
                 url = url.split("?")[0] + "?" + lnurlw.split("?")[1];
                 // url = "https://testnet.demo.btcpayserver.org/boltcards/balance?p=...&c=..."
+
+				var params = new URLSearchParams(window.location.search);
+				if (params.toString()) {
+					url += "&" + params;
+				}
     
                 var xhttp = new XMLHttpRequest();
                 xhttp.onreadystatechange = async function () {
@@ -106,13 +116,16 @@
                             setState(initState);
                             document.getElementById("balance-table").innerHTML = "";
                         });
-    
+
+						toggleDetailsWhenPressed('lnurlwithdraw-button', 'lnurl-pay');
+						toggleDetailsWhenPressed('reset-button', 'boltcard-reset');
+
 						await uiDelay;
                         setState("ShowBalance");
                     }
                     else if(this.readyState == 4 && this.status == 404) {
                         setState(initState);
-						handleError(new Error("Initialized, but NOT by Bitcoin Atlantis"));
+						handleError(new Error("Initialized by a different provider"));
                     }
                     else {
                         setState(initState);
@@ -233,7 +246,7 @@
             catch (e) {
                 handleError(e);
             }
-			// showBalance("lnurl://ewfw?p=test&c=test");
+			 // showBalance("lnurl://ewfw?p=test&c=test");
 		});
 	})();
 </script>

@@ -4,6 +4,11 @@ using BTCPayServer.Client.Models;
 
 namespace BTCPayServer.Plugins.BoltcardBalance.ViewModels
 {
+    public enum Mode
+    {
+        TopUp,
+        Reset
+    }
     public class BalanceViewModel
     {
         public class Transaction
@@ -22,5 +27,6 @@ namespace BTCPayServer.Plugins.BoltcardBalance.ViewModels
         public string LNUrlPay { get; set; }
 
         public string WipeData{ get; set; }
+        public Mode ViewMode { get; set; }
     }
 }
