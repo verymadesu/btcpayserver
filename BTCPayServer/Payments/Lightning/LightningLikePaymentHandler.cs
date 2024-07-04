@@ -97,6 +97,15 @@ namespace BTCPayServer.Payments.Lightning
                     var request = new CreateInvoiceParams(new LightMoney(due, LightMoneyUnit.BTC), description, expiry);
                     request.PrivateRouteHints = storeBlob.LightningPrivateRouteHints;
                     lightningInvoice = await client.CreateInvoice(request, cts.Token);
+
+                    // Only apply Rate on non BTC invoices
+                    // if API due is larger, otherwise it will mask problems with exchange rate
+                    if (invoice.Currency != "BTC")
+                    {
+                        var apiDue = lightningInvoice.Amount.ToUnit(LightMoneyUnit.BTC);
+                        if (apiDue > due)
+                            paymentMethod.Rate = invoice.MinimumNetDue / apiDue;
+                    }
                 }
                 catch (OperationCanceledException) when (cts.IsCancellationRequested)
                 {
