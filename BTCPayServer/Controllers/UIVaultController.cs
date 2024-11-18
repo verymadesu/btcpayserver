@@ -148,16 +148,11 @@ namespace BTCPayServer.Controllers
                                 var derivationSettings = GetDerivationSchemeSettings(walletId);
                                 derivationSettings.RebaseKeyPaths(psbt);
                                 
-                                // if we only have one root fingerprint setup, then check if it matches device
-                                var multisigOnServer = derivationSettings.IsMultisigOnServer;
-                                if (!multisigOnServer)
+                                // we ensure that the device fingerprint is part of the derivation settings
+                                if (derivationSettings.AccountKeySettings.All(a => a.RootFingerprint != fingerprint))
                                 {
-                                    var signing = derivationSettings.GetSigningAccountKeySettings();
-                                    if (signing.GetRootedKeyPath()?.MasterFingerprint != fingerprint)
-                                    {
-                                        await websocketHelper.Send("{ \"error\": \"wrong-wallet\"}", cancellationToken);
-                                        continue;
-                                    }
+                                    await websocketHelper.Send("{ \"error\": \"wrong-wallet\"}", cancellationToken);
+                                    continue;
                                 }
                                 
                                 // otherwise, let the device check if it can sign anything
@@ -174,6 +169,7 @@ namespace BTCPayServer.Controllers
                                         continue;
                                     }
                                     
+                                    var multisigOnServer = derivationSettings.IsMultisigOnServer;
                                     if (multisigOnServer)
                                     {
                                         var alreadySigned = psbt.Inputs.Any(a =>
